@@ -1,12 +1,13 @@
 package log
 
 import (
-	"github.com/stretchr/testify/require"
-	api "github.com/yurakawa/proglog/api/v1"
-	"google.golang.org/protobuf/proto"
 	"io"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	api "github.com/yurakawa/proglog/api/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestLog(t *testing.T) {
@@ -46,13 +47,15 @@ func testAppendRead(t *testing.T, log *Log) {
 	read, err := log.Read(off)
 	require.NoError(t, err)
 	require.Equal(t, append.Value, read.Value)
+	require.NoError(t, log.Close())
 }
 
 // ログに保存されているオフセットの範囲外のオフセットを読み取ろうとすると、ログがエラーを返す。
 func testOutOfRangeErr(t *testing.T, log *Log) {
 	read, err := log.Read(1)
 	require.Nil(t, read)
-	require.Error(t, err)
+	apiErr := err.(api.ErrOffsetOutOfRange)
+	require.Equal(t, uint64(1), apiErr.Offset)
 	require.NoError(t, log.Close())
 }
 
@@ -121,9 +124,11 @@ func testTruncate(t *testing.T, log *Log) {
 		require.NoError(t, err)
 	}
 
+	// 0を消せ！1は残る
 	err := log.Truncate(1)
 	require.NoError(t, err)
 
+	// 消したやつがout of range errorを返す。
 	_, err = log.Read(0)
 	require.Error(t, err)
 	require.NoError(t, log.Close())

@@ -86,6 +86,7 @@ func (i *index) Write(off uint32, pos uint64) error {
 	return nil
 }
 
+// エントリを1個足したら、超えてしまうかという判定
 func (i *index) isMaxed() bool {
 	return uint64(len(i.mmap)) < i.size+entWidth
 }

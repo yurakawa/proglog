@@ -1,8 +1,6 @@
 package log
 
 import (
-	"fmt"
-	api "github.com/yurakawa/proglog/api/v1"
 	"io"
 	"os"
 	"path"
@@ -10,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	api "github.com/yurakawa/proglog/api/v1"
 )
 
 type Log struct {
@@ -61,6 +61,7 @@ func (l *Log) setup() error {
 	sort.Slice(baseOffsets, func(i, j int) bool {
 		return baseOffsets[i] < baseOffsets[j]
 	})
+	// 既存のセグメントがない場合、下の処理はスキップされる。
 	for i := 0; i < len(baseOffsets); i++ {
 		if err = l.newSegment(baseOffsets[i]); err != nil {
 			return err
@@ -120,8 +121,9 @@ func (l *Log) Read(off uint64) (*api.Record, error) {
 			break
 		}
 	}
+	// || s.nextOffset <= offはいらなそう
 	if s == nil || s.nextOffset <= off {
-		return nil, fmt.Errorf("offset out of range: %d", off)
+		return nil, api.ErrOffsetOutOfRange{Offset: off}
 	}
 	// レコードを含むセグメントセグメントを見つけたら、そのセグメントのインデックスからインデックスエントリを取得して
 	// ストアファイルからデータを読み出して、そのデータを呼び出し元に返す。
@@ -130,6 +132,7 @@ func (l *Log) Read(off uint64) (*api.Record, error) {
 
 // セグメントをすべてクローズする
 func (l *Log) Close() error {
+	// read/writeロックを取得する
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for _, segment := range l.segments {
@@ -226,6 +229,7 @@ type originReader struct {
 
 func (o *originReader) Read(p []byte) (int, error) {
 	n, err := o.store.ReadAt(p, o.off)
+	// 呼んだ文だけオフセットをずらす
 	o.off += int64(n)
 	return n, err
 }

@@ -35,7 +35,7 @@ func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
 	}
 	indexFile, err := os.OpenFile( // indexファイルを開く
 		filepath.Join(dir, fmt.Sprintf("%d%s", baseOffset, ".index")),
-		os.O_RDWR|os.O_CREATE|os.O_APPEND,
+		os.O_RDWR|os.O_CREATE, //  Appendはついていない
 		0600,
 	)
 	if err != nil {
@@ -117,6 +117,7 @@ func (s *segment) Remove() error {
 	if err := os.Remove(s.index.Name()); err != nil {
 		return err
 	}
+
 	if err := os.Remove(s.store.Name()); err != nil {
 		return err
 	}

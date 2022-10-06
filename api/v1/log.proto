@@ -8,3 +8,28 @@ message Record {
   bytes value = 1;
   uint64 offset = 2;
 }
+
+service Log {
+  rpc Produce(ProduceRequest) returns (ProduceResponse) {}
+  rpc Consume(ConsumeRequest) returns (ConsumeResponse) {}
+  // クライアントがサーバにリクエストを送信し、一連のメッセージを読み出すためのストリームを受信するためのストリームを受信するストリーミングRPC
+  rpc ConsumeStream(ConsumeRequest) returns (stream ConsumeResponse) {}
+  // クライアントとサーバの両方が読み書き可能なストリームを使って一連のメッセージを送信する双方向ストリーミングRPC
+  rpc ProduceStream(stream ProduceRequest) returns (stream ProduceResponse) {}
+}
+
+message ProduceRequest {
+  Record record = 1;
+}
+
+message ProduceResponse {
+  uint64 offset = 1;
+}
+
+message ConsumeRequest {
+  uint64 offset = 1;
+}
+
+message ConsumeResponse {
+  Record record = 1;
+}

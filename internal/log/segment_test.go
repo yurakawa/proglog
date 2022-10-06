@@ -1,12 +1,13 @@
 package log
 
 import (
-	"github.com/stretchr/testify/require"
-	api "github.com/yurakawa/proglog/api/v1"
-	"google.golang.org/protobuf/proto"
 	"io"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	api "github.com/yurakawa/proglog/api/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // セグメントにレコードを追加し、同じレコードを読み出し、最終的にストアとインデックスの両
@@ -41,11 +42,15 @@ func TestSegment(t *testing.T) {
 	_, err = s.Append(want)
 	require.Equal(t, io.EOF, err)
 
+	//// ここから違うテスト
+
 	// インデックスが最大
 	require.True(t, s.IsMaxed())
 	require.NoError(t, s.Close())
 
 	p, _ := proto.Marshal(want)
+	// len(p)は、レコードのバイト数: 8バイト
+	// Maxを広げているかけるサイズを広げている。
 	c.Segment.MaxStoreBytes = uint64(len(p)+lenWidth) * 4
 	c.Segment.MaxIndexBytes = 1024
 
