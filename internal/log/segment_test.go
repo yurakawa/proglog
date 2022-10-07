@@ -60,6 +60,8 @@ func TestSegment(t *testing.T) {
 	// ストアが最大
 	require.True(t, s.IsMaxed())
 
+	require.NoError(t, s.Remove())
+
 	s, err = newSegment(dir, 16, c)
 	require.NoError(t, err)
 	require.False(t, s.IsMaxed())

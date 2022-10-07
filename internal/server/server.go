@@ -5,6 +5,7 @@ import (
 	"time"
 
 	api "github.com/yurakawa/proglog/api/v1"
+	"google.golang.org/grpc"
 )
 
 type Config struct {
@@ -17,6 +18,16 @@ type grpcServer struct {
 	// LogServerに定義されているエンドポイントについてUnimplementedエラーを返す
 	api.UnimplementedLogServer
 	*Config
+}
+
+func NewGRPCServer(config *Config) (*grpc.Server, error) {
+	gsrv := grpc.NewServer()
+	srv, err := newgrpcServer(config)
+	if err != nil {
+		return nil, err
+	}
+	api.RegisterLogServer(gsrv, srv)
+	return gsrv, nil
 }
 
 // コンストラクタ関数
