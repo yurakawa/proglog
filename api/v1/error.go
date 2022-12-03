@@ -3,6 +3,8 @@ package log_v1
 import (
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/status"
 )
@@ -13,7 +15,7 @@ type ErrOffsetOutOfRange struct {
 
 func (e ErrOffsetOutOfRange) GRPCStatus() *status.Status {
 	st := status.New(
-		404, // Not Found. OutOfRangeが正しいのでは
+		codes.OutOfRange, // 404ではなくNot Found. OutOfRangeが正しい
 		fmt.Sprintf("offset out of range: %d", e.Offset),
 	)
 	msg := fmt.Sprintf("The Requested offset is outside the log's range: %d", e.Offset)
