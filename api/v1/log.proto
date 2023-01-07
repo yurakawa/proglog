@@ -18,6 +18,7 @@ service Log {
   rpc ConsumeStream(ConsumeRequest) returns (stream ConsumeResponse) {}
   // クライアントとサーバの両方が読み書き可能なストリームを使って一連のメッセージを送信する双方向ストリーミングRPC
   rpc ProduceStream(stream ProduceRequest) returns (stream ProduceResponse) {}
+  rpc GetServers(GetServersRequest) returns (GetServersResponse) {}
 }
 
 message ProduceRequest {
@@ -34,4 +35,14 @@ message ConsumeRequest {
 
 message ConsumeResponse {
   Record record = 1;
+}
+
+message GetServersRequest {}
+message GetServersResponse {
+  repeated Server servers = 1;
+}
+message Server {
+  string id = 1;
+  string rpc_addr = 2;
+  bool is_leader = 3;
 }

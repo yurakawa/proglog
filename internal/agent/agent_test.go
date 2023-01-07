@@ -8,16 +8,17 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc/status"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-
 	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/go-dynaport"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
+
 	api "github.com/yurakawa/proglog/api/v1"
 	"github.com/yurakawa/proglog/internal/agent"
 	"github.com/yurakawa/proglog/internal/config"
+	"github.com/yurakawa/proglog/internal/loadbalance"
 )
 
 func TestAgent(t *testing.T) {
@@ -29,7 +30,7 @@ func TestAgent(t *testing.T) {
 		ServerAddress: "127.0.0.1",
 	})
 	require.NoError(t, err)
-	// 他のサーバにつなぐときのに利用
+
 	peerTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
 		CertFile:      config.RootClientCertFile,
 		KeyFile:       config.RootClientKeyFile,
@@ -42,24 +43,23 @@ func TestAgent(t *testing.T) {
 	var agents []*agent.Agent
 	for i := 0; i < 3; i++ {
 		ports := dynaport.Get(2)
-		// 自分のポート
 		bindAddr := fmt.Sprintf("%s:%d", "127.0.0.1", ports[0])
-		// rpcのポート
 		rpcPort := ports[1]
+
 		dataDir, err := os.MkdirTemp("", "agent-test-log")
 		require.NoError(t, err)
+
 		var startJoinAddrs []string
-		//(startJoinAddrsは空)なので ループの1回目はここに入らない。
 		if i != 0 {
 			startJoinAddrs = append(
 				startJoinAddrs,
-				// 最初のサーバのbindアドレスが入るのでそこにみんなつなぎに行く
 				agents[0].Config.BindAddr,
 			)
 		}
+
 		agent, err := agent.New(agent.Config{
 			NodeName:        fmt.Sprintf("%d", i),
-			StartJoinAddrs:  startJoinAddrs, // ループの最初だけnilがはいる。
+			StartJoinAddrs:  startJoinAddrs,
 			BindAddr:        bindAddr,
 			RPCPort:         rpcPort,
 			DataDir:         dataDir,
@@ -67,8 +67,10 @@ func TestAgent(t *testing.T) {
 			ACLPolicyFile:   config.ACLPolicyFile,
 			ServerTLSConfig: serverTLSConfig,
 			PeerTLSConfig:   peerTLSConfig,
+			Bootstrap:       i == 0,
 		})
 		require.NoError(t, err)
+
 		agents = append(agents, agent)
 	}
 	defer func() {
@@ -92,7 +94,10 @@ func TestAgent(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	// 今書き込んだものが読めるか確認
+
+	// レプリケーションが完了するまで待つ
+	time.Sleep(3 * time.Second)
+
 	consumeResponse, err := leaderClient.Consume(
 		context.Background(),
 		&api.ConsumeRequest{
@@ -102,10 +107,7 @@ func TestAgent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
 
-	// レプリケーションが完了するまで待つ
-	time.Sleep(3 * time.Second)
 	followerClient := client(t, agents[1], peerTLSConfig)
-	// 他のエージェントにレプリケーションされている確認
 	consumeResponse, err = followerClient.Consume(
 		context.Background(),
 		&api.ConsumeRequest{
@@ -124,7 +126,7 @@ func TestAgent(t *testing.T) {
 	require.Nil(t, consumeResponse)
 	require.Error(t, err)
 	got := status.Code(err)
-	want := status.Code(api.ErrOffsetOutOfRange{}.GRPCStatus().Err())
+	want := codes.OutOfRange
 	require.Equal(t, got, want)
 }
 
@@ -137,8 +139,14 @@ func client(
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(tlsCreds)}
 	rpcAddr, err := agent.Config.RPCAddr()
 	require.NoError(t, err)
-	conn, err := grpc.Dial(rpcAddr, opts...)
+
+	conn, err := grpc.Dial(fmt.Sprintf(
+		"%s:///%s",
+		loadbalance.Name,
+		rpcAddr,
+	), opts...) //
 	require.NoError(t, err)
+
 	client := api.NewLogClient(conn)
 	return client
 }

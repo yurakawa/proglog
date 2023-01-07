@@ -2,7 +2,6 @@ package log_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"reflect"
@@ -20,9 +19,9 @@ func TestMultipleNodes(t *testing.T) {
 	var logs []*log.DistributedLog
 	// 3つのサーバから構成されるクラスタを設定する。
 	nodeCount := 3
-	ports := dynaport.Get(nodeCount)
+	ports := dynaport.Get(nodeCount) // 空いているportをとってくる
 	for i := 0; i < nodeCount; i++ {
-		dataDir, err := ioutil.TempDir("", "distributed-log-test")
+		dataDir, err := os.MkdirTemp("", "distributed-log-test")
 		require.NoError(t, err)
 		// for loopのなかでdeferしている。メモリ食うので推奨されていないけどcountが3でtestだからいいか
 		defer func(dir string) {
@@ -37,9 +36,9 @@ func TestMultipleNodes(t *testing.T) {
 		config.Raft.StreamLayer = log.NewStreamLayer(ln, nil, nil)
 		config.Raft.LocalID = raft.ServerID(fmt.Sprintf("%d", i))
 		// タイムアウト設定を短くして、Raftが素早くリーダを選出できるようにする。
-		config.Raft.HeartbeatTimeout = 50 * time.Millisecond
-		config.Raft.ElectionTimeout = 50 * time.Millisecond
-		config.Raft.LeaderLeaseTimeout = 50 * time.Millisecond
+		config.Raft.HeartbeatTimeout = 100 * time.Millisecond
+		config.Raft.ElectionTimeout = 100 * time.Millisecond
+		config.Raft.LeaderLeaseTimeout = 100 * time.Millisecond
 		config.Raft.CommitTimeout = 5 * time.Millisecond
 
 		// 一つ目のサーバは、クラスタをブートストラップしてリーダーになり、残りの二つのサーバをク
@@ -71,6 +70,7 @@ func TestMultipleNodes(t *testing.T) {
 		{Value: []byte("second")},
 	}
 	for _, record := range records {
+		// 0番目のサーバにappendを呼ぶ
 		off, err := logs[0].Append(record)
 		require.NoError(t, err)
 		require.Eventually(t, func() bool {
@@ -79,6 +79,7 @@ func TestMultipleNodes(t *testing.T) {
 				if err != nil {
 					return false
 				}
+				// この行いらんのでは
 				record.Offset = off
 				if !reflect.DeepEqual(got.Value, record.Value) {
 					return false
@@ -87,10 +88,25 @@ func TestMultipleNodes(t *testing.T) {
 			return true
 		}, 500*time.Millisecond, 50*time.Millisecond)
 	}
+	servers, err := logs[0].GetServers()
+	require.NoError(t, err)
+	require.Equal(t, 3, len(servers))
+	require.True(t, servers[0].IsLeader)
+	require.False(t, servers[1].IsLeader)
+	require.False(t, servers[2].IsLeader)
+
 	// リーダーがクラスタから離脱したサーバへのレプリケーションを停止し、既存の
 	// サーバへのレプリケーションは継続することを確認しています
-	err := logs[0].Leave("1")
+	err = logs[0].Leave("1")
 	require.NoError(t, err)
+
+	time.Sleep(50 * time.Millisecond)
+	servers, err = logs[0].GetServers()
+	require.NoError(t, err)
+	require.Equal(t, 2, len(servers))
+	require.True(t, servers[0].IsLeader)
+	require.False(t, servers[1].IsLeader)
+
 	time.Sleep(50 * time.Millisecond)
 	off, err := logs[0].Append(&api.Record{
 		Value: []byte("third"),

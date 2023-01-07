@@ -197,8 +197,8 @@ func (l *DistributedLog) Join(id, addr string) error {
 	for _, srv := range configFuture.Configuration().Servers {
 		// serverID, serverAddrが共に一致する時は既に参加しているので削除しない
 		// どちらか一方ならRemoveServerでJoin対象のserverIDを削除している
-		if srv.ID == serverID || srv.Address == serverAddr {
-			if srv.ID == serverID && srv.Address == serverAddr {
+		if srv.ID == serverID || srv.Address == serverAddr { // serverAddrの条件と↓
+			if srv.ID == serverID && srv.Address == serverAddr { // serverIDの条件は不要では
 				// サーバはすでに参加している
 				return nil
 			}
@@ -231,8 +231,8 @@ func (l *DistributedLog) WaitForLeader(timeout time.Duration) error {
 		// タイムアウト
 		case <-timeoutc:
 			return fmt.Errorf("timed out")
-			// リーダーを選出
 		case <-ticker.C:
+			// リーダーが選出されているか確認しに行く
 			if l := l.raft.Leader(); l != "" {
 				return nil
 			}
@@ -252,6 +252,22 @@ func (l *DistributedLog) Close() error {
 	}
 	// RaftのローカルログをClose
 	return l.log.Close()
+}
+
+func (l *DistributedLog) GetServers() ([]*api.Server, error) {
+	future := l.raft.GetConfiguration()
+	if err := future.Error(); err != nil {
+		return nil, err
+	}
+	var servers []*api.Server
+	for _, server := range future.Configuration().Servers {
+		servers = append(servers, &api.Server{
+			Id:       string(server.ID),
+			RpcAddr:  string(server.Address),
+			IsLeader: l.raft.Leader() == server.Address,
+		})
+	}
+	return servers, nil
 }
 
 var _ raft.FSM = (*fsm)(nil)
@@ -431,15 +447,6 @@ func (s *StreamLayer) Dial(addr raft.ServerAddress, timeout time.Duration) (net.
 	if s.peerTLSConfig != nil {
 		conn = tls.Client(conn, s.peerTLSConfig)
 	}
-	// if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
-	// 	return nil, err
-	// }
-	// if _, err := conn.Write([]byte{RaftRPC}); err != nil {
-	// 	return nil, err
-	// }
-	//if err := conn.SetDeadline(time.Time{}); err != nil {
-	//	return nil, err
-	//}
 	return conn, nil
 }
 
