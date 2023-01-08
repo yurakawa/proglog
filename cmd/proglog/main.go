@@ -1,4 +1,4 @@
-package proglog
+package main
 
 import (
 	"log"

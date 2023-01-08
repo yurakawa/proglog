@@ -40,6 +40,7 @@ func TestMultipleNodes(t *testing.T) {
 		config.Raft.ElectionTimeout = 100 * time.Millisecond
 		config.Raft.LeaderLeaseTimeout = 100 * time.Millisecond
 		config.Raft.CommitTimeout = 5 * time.Millisecond
+		config.Raft.BindAddr = ln.Addr().String()
 
 		// 一つ目のサーバは、クラスタをブートストラップしてリーダーになり、残りの二つのサーバをク
 		// ラスタに追加しています。この後、リーダーは他のサーバをそのクラスタに参加させる必要があり

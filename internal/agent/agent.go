@@ -78,8 +78,13 @@ func New(config Config) (*Agent, error) {
 // RPCアドレスにRaftとgRPCの両方の接続を受け付けるリスナーを作成し。そのリスナーでmuxを作成する。
 // muxはリスナーからの接続を受け付け、設定されたルールに基づいてコネクションを識別する
 func (a *Agent) setupMux() error {
+	addr, err := net.ResolveTCPAddr("tcp", a.Config.BindAddr)
+	if err != nil {
+		return err
+	}
 	rpcAddr := fmt.Sprintf(
-		":%d",
+		"%s:%d",
+		addr.IP.String(),
 		a.Config.RPCPort,
 	)
 	ln, err := net.Listen("tcp", rpcAddr)
@@ -116,11 +121,15 @@ func (a *Agent) setupLog() error {
 		a.Config.PeerTLSConfig,
 	)
 
+	rpcAddr, err := a.Config.RPCAddr()
+	if err != nil {
+		return err
+	}
+	logConfig.Raft.BindAddr = rpcAddr
 	logConfig.Raft.LocalID = raft.ServerID(a.Config.NodeName)
 	logConfig.Raft.Bootstrap = a.Config.Bootstrap
 	logConfig.Raft.CommitTimeout = 1000 * time.Millisecond
 
-	var err error
 	// 前段で作成したlogConfigを使ってDis
 	a.log, err = log.NewDistributedLog(
 		a.Config.DataDir,

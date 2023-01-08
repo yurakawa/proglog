@@ -3,8 +3,7 @@ package log
 import (
 	"io"
 	"os"
-
-	"github.com/tysonmote/gommap"
+	"syscall"
 )
 
 const (
@@ -14,9 +13,10 @@ const (
 )
 
 type index struct {
-	file *os.File    // 永続化されたファイル
-	mmap gommap.MMap // メモリマップされたファイル
-	size uint64      // indexの現在のファイルサイズ。次のindexに追加されるエントリをどこに書き込むかを表す
+	file *os.File // 永続化されたファイル
+	// mmap gommap.MMap // メモリマップされたファイル
+	mmap []byte
+	size uint64 // indexの現在のファイルサイズ。次のindexに追加されるエントリをどこに書き込むかを表す
 }
 
 func newIndex(f *os.File, c Config) (*index, error) {
@@ -33,10 +33,12 @@ func newIndex(f *os.File, c Config) (*index, error) {
 	); err != nil {
 		return nil, err
 	}
-	if idx.mmap, err = gommap.Map(
-		idx.file.Fd(),
-		gommap.PROT_READ|gommap.PROT_WRITE,
-		gommap.MAP_SHARED,
+	if idx.mmap, err = syscall.Mmap(
+		int(idx.file.Fd()),
+		0,
+		int(c.Segment.MaxIndexBytes),
+		syscall.PROT_READ|syscall.PROT_WRITE,
+		syscall.MAP_SHARED,
 	); err != nil {
 		return nil, err
 	}
@@ -44,7 +46,8 @@ func newIndex(f *os.File, c Config) (*index, error) {
 }
 
 func (i *index) Close() error {
-	if err := i.mmap.Sync(gommap.MS_SYNC); err != nil {
+	// if err := i.mmap.Sync(gommap.MS_SYNC); err != nil {
+	if err := syscall.Munmap(i.mmap); err != nil {
 		return err
 	}
 	if err := i.file.Sync(); err != nil {
